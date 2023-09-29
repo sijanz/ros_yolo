@@ -1,1 +1,1 @@
-DetectedObject[] objects
+Segment[] objects
