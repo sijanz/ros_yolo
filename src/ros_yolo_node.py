@@ -63,6 +63,33 @@ def image_callback(data):
     bridge = CvBridge()
     global RECEIVED_IMAGE
     RECEIVED_IMAGE = bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
+    
+
+def create_seg_message(model, confidence_threshold):
+    img = RECEIVED_IMAGE
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = model(img)
+
+    data = json.loads(results[0].tojson())
+    
+    msg = []
+
+    for object in data:
+        
+        print(object['name'])
+        print(object['confidence'])
+        
+        if float(object['confidence']) > confidence_threshold:
+            detected_object = YoloSegment(object['name'], object['segments']['x'], object['segments']['y'])
+            msg.append(detected_object)
+            
+        print('objects in message: ', len(msg))
+        
+    return msg
+
+
+def create_pose_message():
+    return
 
 
 def ros_yolo():
@@ -72,31 +99,29 @@ def ros_yolo():
     # create YOLO model by loading the path via launch parameter
     yolo_path = rospy.get_param('/ros_yolo/yolo_path')
     
-    # DEBUG
-    print('yolo path: ', str(yolo_path))
     
     yolo_model = YOLO(yolo_path)
     
     confidence_threshold = rospy.get_param('/ros_yolo/confidence_threshold')
-    
-    # DEBUG
-    print('yolo path: ', yolo_path)
-    print('confidence threshold: ', confidence_threshold)
-    
+
     pub = None
     
     rospy.Subscriber('/camera/color/image_raw', Image, image_callback)
+    
+    model_type = 0
     
     if "seg" in yolo_path:
         pub = rospy.Publisher('/yolo_segments', Segments, queue_size=10)
     elif "pose" in yolo_path:
         pub = rospy.Publisher('/yolo_pose', Poses, queue_size=10)
+        model_type = 1
     
     while not rospy.is_shutdown():
         
         if RECEIVED_IMAGE is None:
             continue
         
+        """
         # get image from callback and convert it
         img = RECEIVED_IMAGE
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -106,16 +131,25 @@ def ros_yolo():
         
         data = json.loads(results[0].tojson())
         
+        """
+        
         msg = []
+        
+        if model_type == 0:
+            msg = create_seg_message(yolo_model, confidence_threshold)
+        else:
+            msg = create_pose_message(yolo_model, confidence_threshold)
+            
+        pub.publish(msg)
 
-        for object in data:
+        # for object in data:
             
-            print(object['name'])
-            print(object['confidence'])
+        #     print(object['name'])
+        #     print(object['confidence'])
             
-            if float(object['confidence']) > confidence_threshold:
-                detected_object = Segment(object['name'], object['segments']['x'], object['segments']['y'])
-                msg.append(detected_object)
+        #     if float(object['confidence']) > confidence_threshold:
+        #         detected_object = Segment(object['name'], object['segments']['x'], object['segments']['y'])
+        #         msg.append(detected_object)
         
         rate.sleep()
         
