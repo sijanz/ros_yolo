@@ -88,8 +88,22 @@ def create_seg_message(model, confidence_threshold):
     return msg
 
 
-def create_pose_message():
-    return
+def create_pose_message(model, confidence_threshold):
+    
+    img = RECEIVED_IMAGE
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = model(img)
+
+    data = json.loads(results[0].tojson())
+    
+    msg = []
+
+    for object in data:
+        if float(object['confidence']) > confidence_threshold:
+            pose = YoloPose(object['keypoints']['x'], object['keypoints']['y'])
+            msg.append(pose)
+            
+    return msg
 
 
 def ros_yolo():
@@ -121,18 +135,6 @@ def ros_yolo():
         if RECEIVED_IMAGE is None:
             continue
         
-        """
-        # get image from callback and convert it
-        img = RECEIVED_IMAGE
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
-        # infere YOLO model
-        results = yolo_model(img)
-        
-        data = json.loads(results[0].tojson())
-        
-        """
-        
         msg = []
         
         if model_type == 0:
@@ -141,19 +143,11 @@ def ros_yolo():
             msg = create_pose_message(yolo_model, confidence_threshold)
             
         pub.publish(msg)
-
-        # for object in data:
-            
-        #     print(object['name'])
-        #     print(object['confidence'])
-            
-        #     if float(object['confidence']) > confidence_threshold:
-        #         detected_object = Segment(object['name'], object['segments']['x'], object['segments']['y'])
-        #         msg.append(detected_object)
         
         rate.sleep()
         
     return
+
 
 if __name__ == '__main__':
     try:
