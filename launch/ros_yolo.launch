@@ -1,0 +1,6 @@
+<launch>
+    <node name="ros_yolo" pkg="ros_yolo" type="ros_yolo_node.py" output="screen">
+        <param name="yolo_path" value="/home/ros/catkin_ws/yolov8n-seg.pt"/>
+        <param name="confidence_threshold" value="0.8"/>
+    </node>
+</launch>

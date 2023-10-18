@@ -35,9 +35,15 @@ POSSIBILITY OF SUCH DAMAGE.
 """
 
 import rospy
+import cv2
+import json
+from ultralytics import YOLO
+from ros_yolo.msg import Pose, Poses, Segment, Segments
+from cv_bridge import CvBridge
+from sensor_msgs.msg import Image
 
 
-YOLO_CONFIDENCE_THRESHOLD = 0.8
+RECEIVED_IMAGE = None
 
 
 class YoloSegment:
@@ -51,17 +57,65 @@ class YoloPose:
     def __init__(self, x_values, y_values):
         self.x_values = x_values
         self.y_values = y_values
+        
+        
+def image_callback(data):
+    bridge = CvBridge()
+    global RECEIVED_IMAGE
+    RECEIVED_IMAGE = bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
 
 
 def ros_yolo():
-    
     rospy.init_node('ros_yolo', anonymous=True)
     rate = rospy.Rate(10)
-    print(YOLO_CONFIDENCE_THRESHOLD)
+    
+    # create YOLO model by loading the path via launch parameter
+    yolo_path = rospy.get_param('/ros_yolo/yolo_path')
+    
+    # DEBUG
+    print('yolo path: ', str(yolo_path))
+    
+    yolo_model = YOLO(yolo_path)
+    
+    confidence_threshold = rospy.get_param('/ros_yolo/confidence_threshold')
+    
+    # DEBUG
+    print('yolo path: ', yolo_path)
+    print('confidence threshold: ', confidence_threshold)
+    
+    pub = None
+    
+    rospy.Subscriber('/camera/color/image_raw', Image, image_callback)
+    
+    if "seg" in yolo_path:
+        pub = rospy.Publisher('/yolo_segments', Segments, queue_size=10)
+    elif "pose" in yolo_path:
+        pub = rospy.Publisher('/yolo_pose', Poses, queue_size=10)
     
     while not rospy.is_shutdown():
         
-        # TODO: add code here
+        if RECEIVED_IMAGE is None:
+            continue
+        
+        # get image from callback and convert it
+        img = RECEIVED_IMAGE
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # infere YOLO model
+        results = yolo_model(img)
+        
+        data = json.loads(results[0].tojson())
+        
+        msg = []
+
+        for object in data:
+            
+            print(object['name'])
+            print(object['confidence'])
+            
+            if float(object['confidence']) > confidence_threshold:
+                detected_object = Segment(object['name'], object['segments']['x'], object['segments']['y'])
+                msg.append(detected_object)
         
         rate.sleep()
         
